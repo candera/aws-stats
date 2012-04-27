@@ -1,5 +1,5 @@
 (ns aws-stats.core
-  (:use [clojure.java.io :only (reader)]
+  (:use [clojure.java.io :only (reader file)]
         [clojure.pprint :only (pprint)]))
 
 (defn between
@@ -59,11 +59,17 @@
   (.contains (.getName f) "."))
 
 (defn log-files [dir]
-  (filter (complement has-extension?)
-          (filter is-file? (seq (.listFiles (java.io.File. dir))))))
+  (->> dir
+       file
+       .listFiles
+       seq
+       (filter is-file?)
+       (filter (complement has-extension?))))
 
 (defn lines [files]
-  (apply concat (map (comp line-seq reader) files)))
+  (->> files
+       (map (comp line-seq reader))
+       (apply concat)))
 
 (defn safe-decode [s]
   (try
