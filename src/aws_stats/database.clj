@@ -45,8 +45,8 @@
    :db/id                 (d/tempid :db.part/db)
    :db.install/_partition :db.part/db})
 
-;; Our schema consists of an entity for the log bucket, which has a
-;; name and a relationship with zero or more logfile entities. A
+;; Our schema consists of an entity for the log source, which has a
+;; URI and a relationship with zero or more logfile entities. A
 ;; logfile entity has a key and a relationship with zero or more
 ;; stats. A stat has a whole bunch of attributes like time, request
 ;; uri, and so forth.
@@ -54,10 +54,13 @@
 (def schemas
   {:core
    [[(partition :aws-stats.part/core "The main partition where we'll put our stuff.")]
-    [(attribute :aws-stats/log-bucket-uri
-                "The URI an s3 bucket containing log files. Looks like s3://bucket-name/prefix"
+    [(attribute :aws-stats/logsource-uri
+                "The URI an s3 location containing log files. Looks like s3://bucket-name/prefix"
                 :db.type/string
                 :db.unique/identity)
+     (attribute :aws-stats/logsource
+                "The S3 location logfiles were pulled from."
+                :db.type/string)
      (attribute :aws-stats/logfile
                 "A reference to an S3 logfile"
                 :db.type/ref)
@@ -68,9 +71,10 @@
      (attribute :aws-stats/logfile-key
                 "The S3 object key identifying a logfile. Looks like 2013-02-03-14-19-52-0FC24E4384112C87"
                 :db.type/string)
-     (attribute :aws-stats/bucket
-                "A reference to an s3 bucket entity"
-                :db.type/ref)
+     (attribute :aws-stats/entry-bucket
+                "The bucket of the object this log entry is talking about. Not to be
+  confused with the bucket where we got the logfile."
+                :db.type/string)
      (attribute :aws-stats/owner
                 "The owner of the object"
                 :db.type/string)

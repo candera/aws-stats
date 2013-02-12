@@ -81,6 +81,18 @@
 
 ;;; aws-stats stuff
 
+(defn doit
+  []
+  (let [creds (ingest/creds access-key secret-key)
+        object-keys (ingest/object-keys creds "www.wangdera.com-logs" nil)
+        key (first object-keys)
+        r (ingest/reader-for-object creds "www.wangdera.com-logs" key)
+        lines (line-seq r)
+        entries (map ingest/parse-line lines)
+        ;;entry-txdata (map #(ingest/logentry-entity-data 1234 %) entries)
+        ]
+    entries))
+
 (comment
 
 (deref (d/transact (conn) [{:db/id (d/tempid :aws-stats.part/core)
@@ -90,6 +102,8 @@
      :where 
      [?e :aws-stats/bucket-name "test"]]
    (db))
+
+
 
 
 )

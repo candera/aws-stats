@@ -3,6 +3,7 @@
             [aws-stats.database :as database]
             [aws-stats.util :as util]
             [clojure.java.io :refer [reader file]]
+            [clojure.string :as str]
             [datomic.api :as d]))
 
 (defn between
@@ -17,36 +18,52 @@
           nil]))))
 
 
+(defn to-long
+  "Parses a string into an integer, or into nil if it is empty or a dash."
+  [s]
+  (cond
+   (str/blank? s) nil
+   (= s "-") nil
+   :else (Long/parseLong s)))
+
+(defn to-inst
+  "Parses a string into a java.util.Date."
+  [s]
+  (.parse (java.text.SimpleDateFormat. "dd/MMM/yyyy:HH:mm:ss zzzz")
+          s
+          (java.text.ParsePosition. 0)))
+
 (def space " ")
 (def dq "\"")
-(def delims [:owner nil space 
-             :bucket nil space
-             :time "[" "]"
-             :remote-ip space space
-             :requester nil space
-             :request-id nil space
-             :operation nil space
-             :key nil space
-             :request-uri dq dq
-             :status space space
-             :error-code nil space
-             :bytes-sent nil space
-             :object-size nil space
-             :total-time nil space
-             :turnaround-time nil space
-             :referrer dq dq
-             :user-agent dq dq
-             :version-id space nil])
+(def delims [:owner nil space identity
+             :bucket nil space identity
+             :time "[" "]" to-inst
+             :remote-ip space space identity
+             :requester nil space identity
+             :request-id nil space identity
+             :operation nil space identity
+             :key nil space identity
+             :request-uri dq dq identity
+             :status space space to-long
+             :error-code nil space identity
+             :bytes-sent nil space to-long
+             :object-size nil space to-long
+             :total-time nil space to-long
+             :turnaround-time nil space to-long
+             :referrer dq dq identity
+             :user-agent dq dq identity
+             :version-id space nil identity
+])
 
 (defn parse-line [line]
   (loop [m      {}
          s      line
-         delims (partition 3 delims)]
+         delims (partition 4 delims)]
     (if (empty? s)
       m
-      (let [[k start-delim end-delim] (first delims)
+      (let [[k start-delim end-delim f] (first delims)
             [match remainder] (between s start-delim end-delim)]
-        (recur (assoc m k match)
+        (recur (assoc m k (f match))
                remainder
                (rest delims))))))
 
@@ -78,7 +95,8 @@
 
 (defn logentry-entity-data
   "Converts a log entry into a map that can be transacted"
-  [{:keys [owner
+  [logfile-eid
+   {:keys [owner
            bucket
            time
            remote-ip
@@ -95,8 +113,7 @@
            turnaround-time
            referrer
            user-agent
-           version-id]}
-   logfile-eid]
+           version-id]}]
   {:db/id (d/tempid :aws-stats.part/core)
    :aws-stats/logfile logfile-eid
    :aws-stats/owner owner
@@ -120,7 +137,7 @@
 
 (defn split-last
   "Splits string `s` at the last occurrence of `sep`, returning a
-  vector containing the two parts." 
+  vector containing the two parts."
   [sep s]
   (let [i (inc (.lastIndexOf s sep))]
     (if (pos? i)
@@ -152,26 +169,26 @@
                {:prefix (nil-if "/" prefix)
                 :key key})))))
 
-(defn log-bucket-eid
-  "Find or create the log bucket entity for `uri`. Returns the entity
+(defn logsource-eid
+  "Find or create the logsource entity for `uri`. Returns the entity
   ID."
   [conn uri]
   (let [tempid (d/tempid :aws-stats.part/core)
         tx-result @(d/transact conn [{:db/id tempid
-                                      :aws-stats/log-bucket-uri uri}])]
+                                      :aws-stats/logsource-uri uri}])]
     (:db/id (database/tx-ent tx-result tempid))))
 
 (defn ingested-logfiles
   "Returns a set of identifiers for logfiles that have been ingested
-  from the bucket identified by log-bucket-eid."
-  [conn log-bucket-eid]
+  from the bucket identified by log-source-eid."
+  [conn logsource-eid]
   (->> (d/q '[:find ?logfile-identifier
-              :in $ ?log-bucket
+              :in $ ?logsource
               :where
-              [?logfile :aws-stats/bucket ?log-bucket]
+              [?logfile :aws-stats/logsource ?logsource]
               [?logfile :aws-stats/logfile-identifier ?logfile-identifier]]
             (d/db conn)
-            log-bucket-eid)
+            logsource-eid)
        (map first)
        set))
 
@@ -189,9 +206,9 @@
   [conn s3-uri access-key secret-key]
   (let [creds                   (creds access-key secret-key)
         {:keys [bucket prefix]} (parse-s3-uri s3-uri :no-key true)
-        log-bucket-eid          (log-bucket-eid conn s3-uri)
+        logsource-eid          (logsource-eid conn s3-uri)
         object-keys             (object-keys creds bucket prefix)
-        ingested-logfiles       (ingested-logfiles conn log-bucket-eid)]
+        ingested-logfiles       (ingested-logfiles conn logsource-eid)]
     (println "Found" (count object-keys) "in" bucket prefix)
     (doseq [key object-keys]
       (if (ingested-logfiles (logfile-identifier s3-uri key))
@@ -200,21 +217,21 @@
               logfile-eid (d/tempid :aws-stats.part/core)]
           (println "Ingesting" key)
           (try
-           (let [logfile-identifier (logfile-identifier s3-uri key)
-                 logfile-txdata {:db/id logfile-eid
-                                 :aws-stats/bucket log-bucket-eid
-                                 :aws-stats/logfile-identifier logfile-identifier}
-                 logentry-txdata (->> (line-seq (reader-for-object creds bucket key))
-                                 (map parse-line)
-                                 (map logentry-entity-data))]
-             @(d/transact conn (concat logfile-txdata
-                                       logentry-txdata)))
-           (catch Throwable t
-             (println "Unable to ingest" key "because of" t))))))))
+            (let [logfile-identifier (logfile-identifier s3-uri key)
+                  logfile-txdata [{:db/id logfile-eid
+                                   :aws-stats/logsource logsource-eid
+                                   :aws-stats/logfile-identifier logfile-identifier}]
+                  logentry-txdata (->> (line-seq (reader-for-object creds bucket key))
+                                       (map parse-line)
+                                       (map #(logentry-entity-data logfile-eid %)))]
+              @(d/transact conn (concat logfile-txdata
+                                        logentry-txdata)))
+            (catch Throwable t
+              (println "Unable to ingest" key "because of" t))))))))
 
 
 ;; Here's what used to be our main function
-(comment 
+(comment
 
   (let [stats (map parse-line (lines (log-files (first args))))
         successes (filter #(= "200" (:status %)) stats)
