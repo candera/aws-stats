@@ -1,5 +1,24 @@
 (ns aws-stats.analysis
-  "This is where we do analysis of what we have in the database")
+  "This is where we do analysis of what we have in the database"
+  (:require [datomic.api :as d]))
+
+(defn download-equivalents
+  "Returns a map of S3 URIs to the equivalent number of times it has
+  been downloaded. A download equivalent is the number of bytes
+  transferred divided by the object size."
+  [db]
+  (into {}
+        (d/q '[:find ?uri (sum ?download)
+               :where
+               [?entry :aws-stats/bytes-sent ?bytes-sent]
+               [?entry :aws-stats/object-size ?object-size]
+               [?entry :aws-stats/key ?key]
+               [?entry :aws-stats/entry-bucket ?bucket]
+               [(str "s3://" ?bucket "/" ?key) ?uri]
+               [(double ?bytes-sent) ?bytes-double]
+               [(/ ?bytes-double ?object-size) ?download]]
+             db)))
+
 
 ;; TODO:
 

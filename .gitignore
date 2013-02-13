@@ -2,5 +2,5 @@
 .lein-deps-sum
 /classes
 /lib
-/dev/creds.clj
 /target
+/dev/private.clj

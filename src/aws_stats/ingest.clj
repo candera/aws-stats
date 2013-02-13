@@ -93,6 +93,13 @@
   (let [opts (if prefix {:prefix prefix} {})]
     (map :key (:objects (s3/list-objects creds bucket opts)))))
 
+(defn without-nil-values
+  "Returns a map without entries where the value is nil"
+  [m]
+  (reduce-kv (fn [a k v] (if (nil? v) a (assoc a k v)))
+             {}
+             m))
+
 (defn logentry-entity-data
   "Converts a log entry into a map that can be transacted"
   [logfile-eid
@@ -114,26 +121,27 @@
            referrer
            user-agent
            version-id]}]
-  {:db/id (d/tempid :aws-stats.part/core)
-   :aws-stats/logfile logfile-eid
-   :aws-stats/owner owner
-   :aws-stats/bucket bucket
-   :aws-stats/time time
-   :aws-stats/remote-ip remote-ip
-   :aws-stats/requester requester
-   :aws-stats/request-id request-id
-   :aws-stats/operation operation
-   :aws-stats/key key
-   :aws-stats/request-uri request-uri
-   :aws-stats/status status
-   :aws-stats/error-code error-code
-   :aws-stats/bytes-sent bytes-sent
-   :aws-stats/object-size object-size
-   :aws-stats/total-time total-time
-   :aws-stats/turnaround-time turnaround-time
-   :aws-stats/referrer referrer
-   :aws-stats/user-agent user-agent
-   :aws-stats/version-id version-id})
+  (without-nil-values
+   {:db/id (d/tempid :aws-stats.part/core)
+    :aws-stats/logfile logfile-eid
+    :aws-stats/owner owner
+    :aws-stats/entry-bucket bucket
+    :aws-stats/time time
+    :aws-stats/remote-ip remote-ip
+    :aws-stats/requester requester
+    :aws-stats/request-id request-id
+    :aws-stats/operation operation
+    :aws-stats/key key
+    :aws-stats/request-uri request-uri
+    :aws-stats/status status
+    :aws-stats/error-code error-code
+    :aws-stats/bytes-sent bytes-sent
+    :aws-stats/object-size object-size
+    :aws-stats/total-time total-time
+    :aws-stats/turnaround-time turnaround-time
+    :aws-stats/referrer referrer
+    :aws-stats/user-agent user-agent
+    :aws-stats/version-id version-id}))
 
 (defn split-last
   "Splits string `s` at the last occurrence of `sep`, returning a
@@ -227,7 +235,9 @@
               @(d/transact conn (concat logfile-txdata
                                         logentry-txdata)))
             (catch Throwable t
-              (println "Unable to ingest" key "because of" t))))))))
+              (println "Unable to ingest" key "because of" t))
+            (finally
+              (.close r))))))))
 
 
 ;; Here's what used to be our main function

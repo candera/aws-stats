@@ -77,7 +77,10 @@
 ;; Grab my AWS keys, but not if the file isn't present - we .gitignore
 ;; it soas not to check it in.
 
-(try (require '[creds :refer [access-key secret-key]]))
+(try (require '[private :refer [access-key secret-key test-bucket]])
+     (catch Throwable _
+       (def access-key nil)
+       (def secret-key nil)))
 
 ;;; aws-stats stuff
 
@@ -93,13 +96,16 @@
         ]
     entries))
 
+(defn ingest []
+  (ingest/ingest (conn) test-bucket access-key secret-key))
+
 (comment
 
 (deref (d/transact (conn) [{:db/id (d/tempid :aws-stats.part/core)
                       :aws-stats/bucket-name "test"}]))
 
-(q '[:find ?e 
-     :where 
+(q '[:find ?e
+     :where
      [?e :aws-stats/bucket-name "test"]]
    (db))
 

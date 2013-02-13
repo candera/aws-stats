@@ -60,7 +60,7 @@
                 :db.unique/identity)
      (attribute :aws-stats/logsource
                 "The S3 location logfiles were pulled from."
-                :db.type/string)
+                :db.type/ref)
      (attribute :aws-stats/logfile
                 "A reference to an S3 logfile"
                 :db.type/ref)
