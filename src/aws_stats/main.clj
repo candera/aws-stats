@@ -58,4 +58,7 @@ s32d report <report-name> <datomic-uri>
      (do
        (println "Unrecognized command:" command)
        (println usage)
-       (System/exit 1)))))
+       (System/exit 1)))
+   (println "Done")
+   (shutdown-agents)
+   (System/exit 0)))
