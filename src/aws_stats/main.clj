@@ -24,7 +24,7 @@ s32d report <report-name> <datomic-uri>
   "Calls the appropriate analysis function with the current value of
   the database and prints the result."
   [report-name datomic-uri]
-  (let [conn (d/connect)
+  (let [conn (d/connect datomic-uri)
         db   (d/db conn)
         report-sym (symbol report-name)
         analysis-ns (the-ns 'aws-stats.analysis)
