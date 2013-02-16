@@ -92,7 +92,17 @@
   with `prefix`, if it is non-nil."
   [creds bucket prefix]
   (let [opts (if prefix {:prefix prefix} {})]
-    (map :key (:objects (s3/list-objects creds bucket opts)))))
+   (loop [keys []
+          marker nil]
+     (let [result (s3/list-objects creds bucket
+                                   (if marker
+                                     (merge opts {:marker marker})
+                                     opts))]
+       (println "Fetched" (count (:objects result)) "keys")
+       (if (:truncated? result)
+         (recur (concat keys (vec (map :key (:objects result))))
+                (:next-marker result))
+         keys)))))
 
 (defn without-nil-values
   "Returns a map without entries where the value is nil"
