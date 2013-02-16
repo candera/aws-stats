@@ -7,21 +7,23 @@
   been downloaded. A download equivalent is the number of bytes
   transferred divided by the object size."
   [db]
-  (into {}
-        (d/q '[:find ?uri (sum ?download)
-               ;; We need a :with because we don't want to sum
-               ;; *unique* downloads, but *all* downloads
-               :with ?request-id
-               :where
-               [?entry :aws-stats/bytes-sent ?bytes-sent]
-               [?entry :aws-stats/object-size ?object-size]
-               [?entry :aws-stats/key ?key]
-               [?entry :aws-stats/entry-bucket ?bucket]
-               [?entry :aws-stats/request-id ?request-id]
-               [(str "s3://" ?bucket "/" ?key) ?uri]
-               [(double ?bytes-sent) ?bytes-double]
-               [(/ ?bytes-double ?object-size) ?download]]
-             db)))
+  (->> (d/q '[:find ?uri (sum ?download)
+              ;; We need a :with because we don't want to sum
+              ;; *unique* downloads, but *all* downloads
+              :with ?request-id
+              :where
+              [?entry :aws-stats/bytes-sent ?bytes-sent]
+              [?entry :aws-stats/object-size ?object-size]
+              [?entry :aws-stats/key ?key]
+              [?entry :aws-stats/entry-bucket ?bucket]
+              [?entry :aws-stats/request-id ?request-id]
+              [(str "s3://" ?bucket "/" ?key) ?uri]
+              [(double ?bytes-sent) ?bytes-double]
+              [(/ ?bytes-double ?object-size) ?download]]
+            db)
+       (into [])
+       (sort-by second)
+       reverse))
 
 
 ;; TODO:
