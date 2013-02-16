@@ -97,7 +97,11 @@
     entries))
 
 (defn ingest []
-  (ingest/ingest (conn) test-bucket access-key secret-key))
+  (let [s3-uri (str test-bucket
+                    "?aws_access_key=" access-key
+                    "&aws_secret_key=" secret-key)]
+    (println "ingesting" s3-uri)
+    (ingest/ingest (conn) s3-uri)))
 
 (comment
 

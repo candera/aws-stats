@@ -4,7 +4,8 @@
             [aws-stats.util :as util]
             [clojure.java.io :refer [reader file]]
             [clojure.string :as str]
-            [datomic.api :as d]))
+            [datomic.api :as d]
+            [ring.util.codec :as codec]))
 
 (defn between
   ([s delim] (between delim delim s))
@@ -157,25 +158,40 @@
   [s1 s2]
   (when-not (= s1 s2) s1))
 
+(defn parse-query
+  "Given a java.net.URI, return the map of the query string
+  parameters."
+  [^java.net.URI uri]
+  (let [q (.getQuery uri)]
+    (if q
+      (let [m (codec/form-decode q)]
+        (if (map? m) m {}))
+      {})))
+
 (defn parse-s3-uri
-  "Given an s3 URI like s3://bucket/prefix/key, return the URI as a
-  map with keys :protocol, :bucket, :prefix, and :key. `options` is a
-  map which may contain `:no-key`, in which case the trailing segment
-  should be treated as the entirety of the prefix. So in the above
-  example, `prefix/key` would be returned as the :prefix, and no :key
-  would be returned."
+  "Given an s3 URI like s3://bucket/prefix/key, return the URI as a map
+  with keys :protocol, :bucket, :prefix, :key, :access-key, and
+  :secret-key. `options` is a map which may contain `:no-key`, in
+  which case the trailing segment should be treated as the entirety of
+  the prefix. So in the above example, `prefix/key` would be returned
+  as the :prefix, and no :key would be returned."
   [uri & {:keys [no-key]}]
-  (let [u (java.net.URI. uri)]
+  (let [u (java.net.URI. uri)
+        q (.getQuery u)]
     (when (not= "s3" (.getScheme u))
       (throw (ex-info (str "URI is not an S3 URI:" uri)
                       {:reason :not-s3-uri
                        :uri uri})))
-    (merge {:bucket (.getHost u)}
-           (if no-key
-             {:prefix (nil-if "/" (.getPath u))}
-             (let [[prefix key] (split-last "/" (.getPath u))]
-               {:prefix (nil-if "/" prefix)
-                :key key})))))
+    (let [{access-key "aws_access_key"
+           secret-key "aws_secret_key"} (parse-query u)]
+     (merge {:bucket (.getHost u)
+             :access-key access-key
+             :secret-key secret-key}
+            (if no-key
+              {:prefix (nil-if "/" (.getPath u))}
+              (let [[prefix key] (split-last "/" (.getPath u))]
+                {:prefix (nil-if "/" prefix)
+                 :key key}))))))
 
 (defn logsource-eid
   "Find or create the logsource entity for `uri`. Returns the entity
@@ -211,12 +227,15 @@
   "Imports the S3 log files living at `s3-uri` into the database using
   connection `conn`. Does not ingest a file if it has already been
   ingested."
-  [conn s3-uri access-key secret-key]
-  (let [creds                   (creds access-key secret-key)
-        {:keys [bucket prefix]} (parse-s3-uri s3-uri :no-key true)
-        logsource-eid          (logsource-eid conn s3-uri)
-        object-keys             (object-keys creds bucket prefix)
-        ingested-logfiles       (ingested-logfiles conn logsource-eid)]
+  [conn s3-uri]
+  (let [{:keys [bucket
+                prefix
+                access-key
+                secret-key]} (parse-s3-uri s3-uri :no-key true)
+        creds                (creds access-key secret-key)
+        logsource-eid        (logsource-eid conn s3-uri)
+        object-keys          (object-keys creds bucket prefix)
+        ingested-logfiles    (ingested-logfiles conn logsource-eid)]
     (println "Found" (count object-keys) "in" bucket prefix)
     (doseq [key object-keys]
       (if (ingested-logfiles (logfile-identifier s3-uri key))
