@@ -91,14 +91,14 @@
   "Returns all the keys in `bucket`, limiting them to those that start
   with `prefix`, if it is non-nil."
   [creds bucket prefix]
-  (let [opts (if prefix {:prefix prefix} {})]
+  (let [default-opts {:max-keys (int 5000)}
+        opts (merge default-opts (if prefix {:prefix prefix} {}))]
    (loop [keys []
           marker nil]
      (let [result (s3/list-objects creds bucket
                                    (if marker
                                      (merge opts {:marker marker})
                                      opts))]
-       (println "Fetched" (count (:objects result)) "keys")
        (if (:truncated? result)
          (recur (concat keys (vec (map :key (:objects result))))
                 (:next-marker result))
@@ -192,7 +192,7 @@
       (throw (ex-info (str "URI is not an S3 URI:" uri)
                       {:reason :not-s3-uri
                        :uri uri})))
-    (let [{access-key "aws_access_key"
+    (let [{access-key "aws_access_key_id"
            secret-key "aws_secret_key"} (parse-query u)]
      (merge {:bucket (.getHost u)
              :access-key access-key
@@ -233,6 +233,14 @@
     (str s3-uri key)
     (str s3-uri "/" key)))
 
+(let [l (Object.)]
+ (defn progress
+   "Reports progress via the command line. Prevents interleaving of messages from multiple threads."
+   [& args]
+   (locking l
+     (apply println args)
+     (flush))))
+
 (defn ingest
   "Imports the S3 log files living at `s3-uri` into the database using
   connection `conn`. Does not ingest a file if it has already been
@@ -241,32 +249,38 @@
   (let [{:keys [bucket
                 prefix
                 access-key
-                secret-key]} (parse-s3-uri s3-uri :no-key true)
+                secret-key]} 
+        (parse-s3-uri s3-uri :no-key true)
+        
         creds                (creds access-key secret-key)
         logsource-eid        (logsource-eid conn s3-uri)
+        _                    (progress "Looking for logfiles")
         object-keys          (object-keys creds bucket prefix)
         ingested-logfiles    (ingested-logfiles conn logsource-eid)]
-    (println "Found" (count object-keys) "in" bucket prefix)
-    (doseq [key object-keys]
-      (if (ingested-logfiles (logfile-identifier s3-uri key))
-        (println "Skipping" key "because it has already been ingested")
-        (let [r (reader-for-object creds bucket key)
-              logfile-eid (d/tempid :aws-stats.part/core)]
-          (println "Ingesting" key)
-          (try
-            (let [logfile-identifier (logfile-identifier s3-uri key)
-                  logfile-txdata [{:db/id logfile-eid
-                                   :aws-stats/logsource logsource-eid
-                                   :aws-stats/logfile-identifier logfile-identifier}]
-                  logentry-txdata (->> (line-seq (reader-for-object creds bucket key))
-                                       (map parse-line)
-                                       (map #(logentry-entity-data logfile-eid %)))]
-              @(d/transact conn (concat logfile-txdata
-                                        logentry-txdata)))
-            (catch Throwable t
-              (println "Unable to ingest" key "because of" t))
-            (finally
-              (.close r))))))))
+    (println "Found" (count object-keys) "in" bucket (or prefix ""))
+    (dorun (pmap (fn [key]
+                   (try
+                    (when-not (ingested-logfiles (logfile-identifier s3-uri key))
+                      (let [r (reader-for-object creds bucket key)
+                            logfile-eid (d/tempid :aws-stats.part/core)]
+                        (progress "Ingesting" key)
+                        (try
+                          (let [logfile-identifier (logfile-identifier s3-uri key)
+                                logfile-txdata [{:db/id logfile-eid
+                                                 :aws-stats/logsource logsource-eid
+                                                 :aws-stats/logfile-identifier logfile-identifier}]
+                                logentry-txdata (->> (line-seq (reader-for-object creds bucket key))
+                                                     (map parse-line)
+                                                     (map #(logentry-entity-data logfile-eid %)))]
+                            @(d/transact conn (concat logfile-txdata
+                                                      logentry-txdata)))
+                          (catch Throwable t
+                            (progress "Unable to ingest" key "because of" t))
+                          (finally
+                            (.close r)))))
+                    (catch Throwable t
+                      (progress "Unable to ingest" key "because of" t)))) 
+                 object-keys))))
 
 
 ;; Here's what used to be our main function
