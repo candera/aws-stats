@@ -1,6 +1,7 @@
 (ns aws-stats.analysis
   "This is where we do analysis of what we have in the database"
-  (:require [datomic.api :as d]))
+  (:require [clojure.string :as str]
+            [datomic.api :as d]))
 
 (defn download-equivalents
   "Returns a map of S3 URIs to the equivalent number of times it has
@@ -25,6 +26,13 @@
        (sort-by second)
        reverse))
 
+(defn download-equivalents-csv
+  "Returns the same thing as `download-equivalents`, but in a CSV string."
+  [db]
+  (->> db
+       download-equivalents
+       (map #(str/join "," %))
+       (str/join "\n")))
 
 ;; TODO:
 

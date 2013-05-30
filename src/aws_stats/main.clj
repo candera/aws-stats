@@ -35,7 +35,7 @@ s32d report <report-name> <datomic-uri>
       2)
     (binding [*print-length* nil
               *print-level* nil]
-      (pprint (report-fn db)))))
+      (println (report-fn db)))))
 
 (defn -main [& args]
   (let [[command & args] args]
