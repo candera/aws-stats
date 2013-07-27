@@ -96,11 +96,9 @@
    (loop [keys []
           marker nil]
      (let [result (s3/list-objects creds bucket
-                                   (if marker
-                                     (merge opts {:marker marker})
-                                     opts))]
+                                   (merge opts (when marker {:marker marker})))]
        (if (:truncated? result)
-         (recur (concat keys (vec (map :key (:objects result))))
+         (recur (into keys (map :key (:objects result)))
                 (:next-marker result))
          keys)))))
 
