@@ -22,10 +22,10 @@
   "Returns transaction data for an entity in the db partition."
   [ident doc]
   {:db/id    (d/tempid :db.part/db)
-   :db/ident ident 
+   :db/ident ident
    :db/doc   doc})
 
-(defn- attribute 
+(defn- attribute
   "Returns transaction data for a Datomic attribute definition with the specified
   properties."
   [name doc type & props]
@@ -126,7 +126,7 @@
      (attribute :aws-stats/version-id
                 "The version ID"
                 :db.type/string)]]
-   
+
    ;; We could have other schemas in here as well
    ;; :other-schema
    ;; [[(attribute :aws-stats/something-else

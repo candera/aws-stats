@@ -249,9 +249,9 @@
   (let [{:keys [bucket
                 prefix
                 access-key
-                secret-key]} 
+                secret-key]}
         (parse-s3-uri s3-uri :no-key true)
-        
+
         creds                (creds access-key secret-key)
         logsource-eid        (logsource-eid conn s3-uri)
         _                    (progress "Looking for logfiles")
@@ -279,7 +279,7 @@
                           (finally
                             (.close r)))))
                     (catch Throwable t
-                      (progress "Unable to ingest" key "because of" t)))) 
+                      (progress "Unable to ingest" key "because of" t))))
                  object-keys))))
 
 
