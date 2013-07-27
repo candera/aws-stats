@@ -7,6 +7,7 @@
                  [org.clojure/tools.namespace "0.2.4"]
                  [ring/ring-codec "1.0.0"]]
   :main aws-stats.main
+  :jvm-opts ["-Xmx4G"]
   :profiles
   {:dev
    {:source-paths ["dev"]}})
