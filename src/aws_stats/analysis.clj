@@ -13,11 +13,11 @@
               ;; *unique* downloads, but *all* downloads
               :with ?request-id
               :where
-              [?entry :aws-stats/bytes-sent ?bytes-sent]
-              [?entry :aws-stats/object-size ?object-size]
-              [?entry :aws-stats/key ?key]
-              [?entry :aws-stats/entry-bucket ?bucket]
-              [?entry :aws-stats/request-id ?request-id]
+              [?entry :s3.stat/bytes-sent ?bytes-sent]
+              [?entry :s3.stat/object-size ?object-size]
+              [?entry :s3.stat/key ?key]
+              [?entry :s3.stat/bucket ?bucket]
+              [?entry :s3.stat/request-id ?request-id]
               [(str "s3://" ?bucket "/" ?key) ?uri]
               [(double ?bytes-sent) ?bytes-double]
               [(/ ?bytes-double ?object-size) ?download]]

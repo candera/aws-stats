@@ -131,26 +131,26 @@
            user-agent
            version-id]}]
   (without-nil-values
-   {:db/id (d/tempid :aws-stats.part/core)
-    :aws-stats/logfile logfile-eid
-    :aws-stats/owner owner
-    :aws-stats/entry-bucket bucket
-    :aws-stats/time time
-    :aws-stats/remote-ip remote-ip
-    :aws-stats/requester requester
-    :aws-stats/request-id request-id
-    :aws-stats/operation operation
-    :aws-stats/key key
-    :aws-stats/request-uri request-uri
-    :aws-stats/status status
-    :aws-stats/error-code error-code
-    :aws-stats/bytes-sent bytes-sent
-    :aws-stats/object-size object-size
-    :aws-stats/total-time total-time
-    :aws-stats/turnaround-time turnaround-time
-    :aws-stats/referrer referrer
-    :aws-stats/user-agent user-agent
-    :aws-stats/version-id version-id}))
+   {:db/id                   (d/tempid :s3.part/stats)
+    :s3.logfile/_stats       logfile-eid
+    :s3.stat/owner           owner
+    :s3.stat/bucket          bucket
+    :s3.stat/time            time
+    :s3.stat/remote-ip       remote-ip
+    :s3.stat/requester       requester
+    :s3.stat/request-id      request-id
+    :s3.stat/operation       operation
+    :s3.stat/key             key
+    :s3.stat/request-uri     request-uri
+    :s3.stat/status          status
+    :s3.stat/error-code      error-code
+    :s3.stat/bytes-sent      bytes-sent
+    :s3.stat/object-size     object-size
+    :s3.stat/total-time      total-time
+    :s3.stat/turnaround-time turnaround-time
+    :s3.stat/referrer        referrer
+    :s3.stat/user-agent      user-agent
+    :s3.stat/version-id      version-id}))
 
 (defn split-last
   "Splits string `s` at the last occurrence of `sep`, returning a
@@ -201,35 +201,26 @@
                 {:prefix (nil-if "/" prefix)
                  :key key}))))))
 
-(defn logsource-eid
-  "Find or create the logsource entity for `uri`. Returns the entity
-  ID."
-  [conn uri]
-  (let [tempid (d/tempid :aws-stats.part/core)
-        tx-result @(d/transact conn [{:db/id tempid
-                                      :aws-stats/logsource-uri uri}])]
-    (:db/id (database/tx-ent tx-result tempid))))
-
 (defn ingested-logfiles
   "Returns a set of identifiers for logfiles that have been ingested
   from the bucket identified by log-source-eid."
-  [conn logsource-eid]
+  [conn]
   (->> (d/q '[:find ?logfile-identifier
-              :in $ ?logsource
               :where
-              [?logfile :aws-stats/logsource ?logsource]
-              [?logfile :aws-stats/logfile-identifier ?logfile-identifier]]
-            (d/db conn)
-            logsource-eid)
+              [?logfile :s3.logfile/identifier ?logfile-identifier]]
+            (d/db conn))
        (map first)
        set))
 
 (defn logfile-identifier
   "Create a logfile identifier given a base S3 URI, and key."
-  [s3-uri key]
-  (if (.endsWith s3-uri "/")
-    (str s3-uri key)
-    (str s3-uri "/" key)))
+  [bucket prefix key]
+  (str "s3://"
+       bucket
+       "/"
+       prefix
+       (when (and prefix (not (.endsWith prefix "/"))) "/")
+       key))
 
 (let [l (Object.)]
  (defn progress
@@ -251,33 +242,31 @@
         (parse-s3-uri s3-uri :no-key true)
 
         creds                (creds access-key secret-key)
-        logsource-eid        (logsource-eid conn s3-uri)
         _                    (progress "Looking for logfiles")
         object-keys          (object-keys creds bucket prefix)
-        ingested-logfiles    (ingested-logfiles conn logsource-eid)]
+        ingested-logfiles    (ingested-logfiles conn)]
     (println "Found" (count object-keys) "in" bucket (or prefix ""))
     (dorun (pmap (fn [key]
                    (try
-                    (when-not (ingested-logfiles (logfile-identifier s3-uri key))
-                      (let [r (reader-for-object creds bucket key)
-                            logfile-eid (d/tempid :aws-stats.part/core)]
-                        (progress "Ingesting" key)
-                        (try
-                          (let [logfile-identifier (logfile-identifier s3-uri key)
-                                logfile-txdata [{:db/id logfile-eid
-                                                 :aws-stats/logsource logsource-eid
-                                                 :aws-stats/logfile-identifier logfile-identifier}]
-                                logentry-txdata (->> (line-seq (reader-for-object creds bucket key))
-                                                     (map parse-line)
-                                                     (map #(logentry-entity-data logfile-eid %)))]
-                            @(d/transact conn (concat logfile-txdata
-                                                      logentry-txdata)))
-                          (catch Throwable t
-                            (progress "Unable to ingest" key "because of" t))
-                          (finally
-                            (.close r)))))
-                    (catch Throwable t
-                      (progress "Unable to ingest" key "because of" t))))
+                     (let [logfile-identifier (logfile-identifier bucket prefix key)]
+                      (when-not (ingested-logfiles logfile-identifier)
+                        (let [r (reader-for-object creds bucket key)
+                              logfile-eid (d/tempid :s3.part/logfiles)]
+                          (progress "Ingesting" key)
+                          (try
+                            (let [logfile-txdata [{:db/id logfile-eid
+                                                   :s3.logfile/identifier logfile-identifier}]
+                                  logentry-txdata (->> (line-seq (reader-for-object creds bucket key))
+                                                       (map parse-line)
+                                                       (map #(logentry-entity-data logfile-eid %)))]
+                              @(d/transact conn (concat logfile-txdata
+                                                        logentry-txdata)))
+                            (catch Throwable t
+                              (progress "Unable to ingest" key "because of" t))
+                            (finally
+                              (.close r))))))
+                     (catch Throwable t
+                       (progress "Unable to ingest" key "because of" t))))
                  object-keys))))
 
 

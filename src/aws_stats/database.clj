@@ -45,106 +45,86 @@
    :db/id                 (d/tempid :db.part/db)
    :db.install/_partition :db.part/db})
 
-;; Our schema consists of an entity for the log source, which has a
-;; URI and a relationship with zero or more logfile entities. A
-;; logfile entity has a key and a relationship with zero or more
-;; stats. A stat has a whole bunch of attributes like time, request
-;; uri, and so forth.
+;; Our database consists of zero or more ingested logfiles, each of
+;; which has an S3 URI and a relationship with zero or more stats. A
+;; stat has a whole bunch of attributes like time, request uri, and so
+;; forth.
 
-(def schemas
-  {:core
-   [[(partition :aws-stats.part/core "The main partition where we'll put our stuff.")]
-    [(attribute :aws-stats/logsource-uri
-                "The URI an s3 location containing log files. Looks like s3://bucket-name/prefix"
-                :db.type/string
-                :db.unique/identity)
-     (attribute :aws-stats/logsource
-                "The S3 location logfiles were pulled from."
-                :db.type/ref)
-     (attribute :aws-stats/logfile
-                "A reference to an S3 logfile"
-                :db.type/ref)
-     (attribute :aws-stats/logfile-identifier
-                "An identifier for a logfile. Looks like s3://bucket-name/prefix/key"
-                :db.type/string
-                :db.unique/identity)
-     (attribute :aws-stats/logfile-key
-                "The S3 object key identifying a logfile. Looks like 2013-02-03-14-19-52-0FC24E4384112C87"
-                :db.type/string)
-     (attribute :aws-stats/entry-bucket
-                "The bucket of the object this log entry is talking about. Not to be
-  confused with the bucket where we got the logfile."
-                :db.type/string)
-     (attribute :aws-stats/owner
-                "The owner of the object"
-                :db.type/string)
-     (attribute :aws-stats/time
-                "The time of the request"
-                :db.type/instant)
-     (attribute :aws-stats/remote-ip
-                "The IP address the request came from"
-                :db.type/string)
-     (attribute :aws-stats/requester
-                "The identity of whomever made the request"
-                :db.type/string)
-     (attribute :aws-stats/request-id
-                "The unique ID of the request"
-                :db.type/string)
-     (attribute :aws-stats/operation
-                "The operation that was performed"
-                :db.type/string)
-     (attribute :aws-stats/key
-                "The key of the object."
-                :db.type/string)
-     (attribute :aws-stats/request-uri
-                "The full request URI, including verb and HTTP version."
-                :db.type/string)
-     (attribute :aws-stats/status
-                "The HTTP status code returned for this request."
-                :db.type/long)
-     (attribute :aws-stats/error-code
-                "The error code returned for this request."
-                :db.type/string)
-     (attribute :aws-stats/bytes-sent
-                "The number of bytes returned with this request."
-                :db.type/long)
-     (attribute :aws-stats/object-size
-                "The size of the object requested."
-                :db.type/long)
-     (attribute :aws-stats/total-time
-                "The time spent servicing this request, in milliseconds"
-                :db.type/long)
-     (attribute :aws-stats/turnaround-time
-                "No idea what this one is"
-                :db.type/long)
-     (attribute :aws-stats/referrer
-                "The referrer"
-                :db.type/string)
-     (attribute :aws-stats/user-agent
-                "The user agent"
-                :db.type/string)
-     (attribute :aws-stats/version-id
-                "The version ID"
-                :db.type/string)]]
-
-   ;; We could have other schemas in here as well
-   ;; :other-schema
-   ;; [[(attribute :aws-stats/something-else
-   ;;              "Description"
-   ;;              :db.type/string
-   ;;              :db.cardinality/one
-   ;;              :db.unique/identity)]]
-   })
+(def schema
+  [[(partition :s3.part/logfiles "The partition where logfile entities go")
+    (partition :s3.part/stats "The partition where stat entities go")]
+   [(attribute :s3.logfile/identifier
+               "An identifier for a logfile. Looks like s3://bucket-name/prefix/key"
+               :db.type/string
+               :db.unique/identity)
+    (attribute :s3.logfile/stats
+               "The stats for this logfile"
+               :db.type/ref
+               :db.cardinality/many)
+    (attribute :s3.stat/bucket
+               "The bucket of the object this stat is talking about. Not to be confused with the bucket where we got the logfile"
+               :db.type/string)
+    (attribute :s3.stat/owner
+               "The owner of the object"
+               :db.type/string)
+    (attribute :s3.stat/time
+               "The time of the request"
+               :db.type/instant)
+    (attribute :s3.stat/remote-ip
+               "The IP address the request came from"
+               :db.type/string)
+    (attribute :s3.stat/requester
+               "The identity of whomever made the request"
+               :db.type/string)
+    (attribute :s3.stat/request-id
+               "The unique ID of the request"
+               :db.type/string)
+    (attribute :s3.stat/operation
+               "The operation that was performed"
+               :db.type/string)
+    (attribute :s3.stat/key
+               "The key of the object."
+               :db.type/string)
+    (attribute :s3.stat/request-uri
+               "The full request URI, including verb and HTTP version."
+               :db.type/string)
+    (attribute :s3.stat/status
+               "The HTTP status code returned for this request."
+               :db.type/long)
+    (attribute :s3.stat/error-code
+               "The error code returned for this request."
+               :db.type/string)
+    (attribute :s3.stat/bytes-sent
+               "The number of bytes returned with this request."
+               :db.type/long)
+    (attribute :s3.stat/object-size
+               "The size of the object requested."
+               :db.type/long)
+    (attribute :s3.stat/total-time
+               "The time spent servicing this request, in milliseconds"
+               :db.type/long)
+    (attribute :s3.stat/turnaround-time
+               "No idea what this one is"
+               :db.type/long)
+    (attribute :s3.stat/referrer
+               "The referrer"
+               :db.type/string)
+    (attribute :s3.stat/user-agent
+               "The user agent"
+               :db.type/string)
+    (attribute :s3.stat/version-id
+               "The version ID"
+               :db.type/string)]])
 
 (defn ensure
   "Asserts additional schema stored at key."
-  [conn key]
-  (doseq [tx (util/getx schemas key)]
+  [conn]
+  (doseq [tx schema]
     @(d/transact conn tx)))
 
 (defn init-db
   [conn]
-  (ensure conn :core))
+  (ensure conn))
 
 ;; Do not create directly; use temp-peer function
 (defrecord TemporaryPeer [uri]

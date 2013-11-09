@@ -96,6 +96,8 @@
         ]
     entries))
 
+(def test-bucket)
+
 (defn ingest []
   (let [s3-uri (str test-bucket
                     "?aws_access_key=" access-key
