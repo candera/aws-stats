@@ -4,6 +4,7 @@
             [aws-stats.util :as util]
             [clojure.java.io :refer [reader file]]
             [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [datomic.api :as d]
             [ring.util.codec :as codec]))
 
@@ -262,10 +263,12 @@
                               @(d/transact conn (concat logfile-txdata
                                                         logentry-txdata)))
                             (catch Throwable t
+                              (log/warn t "Unable to ingest" key)
                               (progress "Unable to ingest" key "because of" t))
                             (finally
                               (.close r))))))
                      (catch Throwable t
+                       (log/warn t "Unable to ingest" key)
                        (progress "Unable to ingest" key "because of" t))))
                  object-keys))))
 
