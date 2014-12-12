@@ -6,3 +6,4 @@
 /dev/private.clj
 /dev/creds.clj
 /.lein-repl-history
+/.nrepl-port

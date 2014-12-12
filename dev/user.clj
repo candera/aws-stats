@@ -115,7 +115,33 @@
      [?e :aws-stats/bucket-name "test"]]
    (db))
 
-
-
-
 )
+
+(defn day
+  "Returns the day of an inst"
+  [inst]
+  (-> inst org.joda.time.DateTime. (.toString "YYYY-MM-dd")))
+
+
+(defn downloads-by-day
+  "Returns a map of S3 URIs to the equivalent number of times it has
+  been downloaded by day. A download equivalent is the number of bytes
+  transferred divided by the object size."
+  [db]
+  (->> (d/q '[:find ?uri ?day (sum ?download)
+              ;; We need a :with because we don't want to sum
+              ;; *unique* downloads, but *all* downloads
+              :with ?request-id
+              :where
+              [?entry :s3.stat/bytes-sent ?bytes-sent]
+              [?entry :s3.stat/object-size ?object-size]
+              [?entry :s3.stat/key ?key]
+              [?entry :s3.stat/bucket ?bucket]
+              [?entry :s3.stat/request-id ?request-id]
+              [?entry :s3.stat/time ?time]
+              [(str "s3://" ?bucket "/" ?key) ?uri]
+              [(user/day ?time) ?day]
+              [(double ?bytes-sent) ?bytes-double]
+              [(/ ?bytes-double ?object-size) ?download]]
+            db)
+       (into [])))
