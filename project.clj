@@ -1,13 +1,16 @@
 (defproject aws-stats "0.7.0"
   :description "Analyzes AWS S3 logfiles"
-  :dependencies [[clj-aws-s3 "0.3.7"]
-                 [com.datomic/datomic-free "0.9.4815"]
-                 [org.clojure/clojure "1.5.1"]
-                 [org.clojure/tools.logging "0.2.6"]
-                 [org.clojure/tools.namespace "0.2.4"]
-                 [ring/ring-codec "1.0.0"]
-                 [joda-time "2.6"]
-                 [incanter "1.5.5"]]
+  :dependencies [[clj-aws-s3 "0.3.10"
+                  :exclusions [joda-time]]
+                 [com.datomic/datomic-free "0.9.5372"]
+                 [org.clojure/clojure "1.8.0"]
+                 [org.clojure/tools.logging "0.3.1"]
+                 [org.clojure/tools.namespace "0.2.10"]
+                 [ring/ring-codec "1.0.1"]
+                 [joda-time "2.9.4"]
+                 ;;[incanter "1.5.5"]
+                 [incanter "1.9.1"]
+                 ]
   :main aws-stats.main
   :jvm-opts ["-Xmx4G"]
   :profiles
